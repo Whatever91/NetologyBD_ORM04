@@ -48,3 +48,4 @@ if __name__ == '__main__':
         print("Доступные имена и id издателей: 1 - O\u2019Reilly, 2 - Pearson, 3 - Microsoft Press, 4 - No starch press")
         user_input = input('Введите имя или id автора: ')
         get_sales_info(session=session, user_input=user_input)
+        
