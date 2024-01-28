@@ -1,54 +1,50 @@
-from sqlalchemy import create_engine, Column, String, Integer, Date
-from sqlalchemy.orm import sessionmaker, relationship
-from sqlalchemy.ext.declarative import declarative_base
+import sqlalchemy
+from sqlalchemy.orm import Session
 
-## Создание подключения к базе данных
-engine = create_engine('postgresql://')
+from config import DSN, echo
+from models import create_tables
+from models import Book, Publisher, Shop, Stock, Sale
+from create_db import create_db
 
-## Создание сессии работы с базой данных
-Session = sessionmaker(bind=engine)
-session = Session()
+DSN = 'sqlite:///:memory:'
+## engine = sq.create_engine(DSN, echo=True)
+engine = sq.create_engine(DSN)
 
-## Объявление базовой модели данных
-Base = declarative_base()
+def db_filling(session, file_path: str):
+    with open(f'{file_path}', 'r') as fd:
+        data = json.load(fd)
 
-## Определение структуры таблицы "Книга"
-class Book(Base):
-    __tablename__ = 'books'
+        for record in data:
+            model = {
+                'publisher': Publisher,
+                'shop': Shop,
+                'book': Book,
+                'stock': Stock,
+                'sale': Sale,
+            }[record.get('model')]
+            session.add(model(id=record.get('pk'), **record.get('fields')))
+        session.commit()
 
-    id = Column(Integer, primary_key=True)
-    name = Column(String)
-    publisher = Column(String)
 
-## Определение структуры таблицы "Магазин"
-class Store(Base):
-    __tablename__ = 'stores'
+def get_sales_info(session, user_input):
+    stmt = session.query(Book.title, Shop.name, Sale.price, Sale.date_sale).\
+        select_from(Shop).\
+        join(Stock).\
+        join(Book).\
+        join(Publisher).\
+        join(Sale)
+    if user_input.isdigit():
+        stmt = stmt.filter(Publisher.id == user_input).all()
+    else:
+        stmt = stmt.filter(Publisher.name == user_input).all()
+    for row in stmt:
+        print(f"{row[0]: <40} | {row[1]: <10} | {row[2]: <8} | {row[3].strftime('%d-%m-%Y')}")
 
-    id = Column(Integer, primary_key=True)
-    name = Column(String)
 
-## Определение структуры таблицы "Покупка"
-class Purchase(Base):
-    __tablename__ = 'purchases'
-
-    id = Column(Integer, primary_key=True)
-    book_id = Column(Integer, ForeignKey('books.id'))
-    store_id = Column(Integer, ForeignKey('stores.id'))
-    price = Column(Integer)
-    date = Column(Date)
-
-    book = relationship("Book", backref="purchases")
-    store = relationship("Store", backref="purchases")
-
-## Получение имени или идентификатора издателя от пользователя
-publisher = input("Введите имя или идентификатор издателя: ")
-
-## Выполнение запроса выборки магазинов, продающих книги данного издателя
-query = session.query(Book.name, Store.name, Purchase.price, Purchase.date)\
-    .join(Purchase, Book.id == Purchase.book_id)\
-    .join(Store, Store.id == Purchase.store_id)\
-    .filter(Book.publisher == publisher)
-
-# Вывод результатов запроса
-for book_name, store_name, price, date in query:
-    print(f"{book_name} | {store_name} | {price} | {date}")
+if __name__ == '__main__':
+    with Session(engine) as session:
+        create_db()
+        db_filling(session=session, file_path='tests_data.json')
+        print("Доступные имена и id издателей: 1 - O\u2019Reilly, 2 - Pearson, 3 - Microsoft Press, 4 - No starch press")
+        user_input = input('Введите имя или id автора: ')
+        get_sales_info(session=session, user_input=user_input)
